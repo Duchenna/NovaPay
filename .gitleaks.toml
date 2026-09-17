@@ -1,0 +1,3 @@
+title = "novapay gitleaks config"
+[allowlist]
+paths = ['''app/tests/.*''']

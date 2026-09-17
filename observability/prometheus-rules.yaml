@@ -1,0 +1,12 @@
+groups:
+  - name: novapay-wallet
+    rules:
+      - alert: WalletErrorRateHigh
+        expr: |
+          sum(rate(wallet_requests_total{status=~"5.."}[5m]))
+          / sum(rate(wallet_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: critical, team: novapay-sre }
+        annotations:
+          summary: "Wallet 5xx error rate >2% for 5m"
+          runbook: "https://wiki/novapay/runbook#unauthorized-access"

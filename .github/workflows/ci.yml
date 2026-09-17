@@ -1,0 +1,59 @@
+name: novapay-ci
+on: { push: { branches: [main] }, pull_request: {} }
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install ruff && ruff check app/
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r app/requirements.txt pytest httpx
+      - run: pytest -q app/tests
+  sast:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: returntocorp/semgrep-action@v1
+        with: { config: p/python p/secrets p/owasp-top-ten }
+  deps-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+  secret-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env: { GITLEAKS_CONFIG: .gitleaks.toml }
+  build-scan:
+    needs: [sast, deps-scan, secret-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        with: { context: ., push: false, tags: "novapay:${{ github.sha }}", load: true }
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "novapay:${{ github.sha }}"
+          severity: 'CRITICAL'
+          exit-code: '1'
+      - name: Verify non-root
+        run: docker run --rm novapay:${{ github.sha }} id | grep -q nonroot

@@ -1,0 +1,11 @@
+services:
+  wallet:
+    build: .
+    ports: ["8080:8080"]
+    environment: { APP_VERSION: "local" }
+    read_only: true
+    user: "65532:65532"
+  prometheus:
+    image: prom/prometheus
+    volumes: ["./observability:/etc/prometheus"]
+    ports: ["9090:9090"]
