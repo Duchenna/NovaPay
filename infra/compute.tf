@@ -49,28 +49,6 @@ resource "aws_iam_role" "task_exec" {
   })
 }
 
-resource "aws_iam_role_policy" "task_exec" {
-  role = aws_iam_role.task_exec.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      { Effect   = "Allow"
-        Action   = ["ecr:GetAuthorizationToken"]
-        Resource = "*" },   # JUSTIFIED: account-scoped, AWS-defined, no narrower ARN exists
-      { Effect   = "Allow"
-        Action   = ["ecr:BatchCheckLayerAvailability",
-                    "ecr:GetDownloadUrlForLayer",
-                    "ecr:BatchGetImage"]
-        Resource = aws_ecr_repository.wallet.arn },
-      { Effect   = "Allow"
-        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "${aws_cloudwatch_log_group.wallet.arn}:*" },
-      { Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_secretsmanager_secret.db_pass.arn }
-    ]
-  })
-}
 
 # ---------------------------------------------------------------------------
 # IAM — task role (app identity: only read its own secret)
@@ -87,17 +65,6 @@ resource "aws_iam_role" "task" {
   })
 }
 
-resource "aws_iam_role_policy" "task" {
-  role = aws_iam_role.task.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = aws_secretsmanager_secret.db_pass.arn
-    }]
-  })
-}
 
 # ---------------------------------------------------------------------------
 # ECS task definition — bootstrapped by Terraform, continuously updated by CI
