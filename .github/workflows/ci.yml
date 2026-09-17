@@ -38,6 +38,8 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install -r app/requirements.txt pytest httpx
       - run: pytest -q app/tests
+      env:
+        PYTHONPATH: .
 
   # ---- STATIC ANALYSIS LAYER 1: SAST on source code ----
   sast:
