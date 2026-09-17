@@ -37,9 +37,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install -r app/requirements.txt pytest httpx
-      - run: pytest -q app/tests
-      env:
-        PYTHONPATH: .
+      - run: python -m pytest -q app/tests
 
   # ---- STATIC ANALYSIS LAYER 1: SAST on source code ----
   sast:
