@@ -52,7 +52,6 @@ resource "aws_db_subnet_group" "private" {
 resource "aws_iam_role_policy" "task" {
   role = aws_iam_role.task.id
   policy = jsonencode({
-    Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
@@ -62,7 +61,6 @@ resource "aws_iam_role_policy" "task" {
 }
 
 resource "aws_iam_role_policy" "task_exec" {
-  role = aws_iam_role.task_exec.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
