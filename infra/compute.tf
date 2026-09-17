@@ -79,8 +79,8 @@ resource "aws_ecs_task_definition" "wallet" {
   task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
-    name  = "wallet"
-    image = "${aws_ecr_repository.wallet.repository_url}:${var.image_tag}"
+    name         = "wallet"
+    image        = "${aws_ecr_repository.wallet.repository_url}:${var.image_tag}"
     portMappings = [{ containerPort = 8080, protocol = "tcp" }]
 
     secrets = [{
@@ -98,7 +98,7 @@ resource "aws_ecs_task_definition" "wallet" {
     }
 
     readonlyRootFilesystem = true
-    user                   = "65532:65532"   # distroless nonroot
+    user                   = "65532:65532" # distroless nonroot
 
     healthCheck = {
       command     = ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\" || exit 1"]
