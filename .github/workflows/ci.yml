@@ -1,6 +1,26 @@
-name: novapay-ci
-on: { push: { branches: [main] }, pull_request: {} }
+name: novapay-ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  security-events: write   # for SARIF upload to GitHub Security tab
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPO: novapay-wallet
+  ECS_CLUSTER: novapay-cluster
+  ECS_SERVICE: wallet
+
 jobs:
+  # ------------------------------------------------------------------
+  # CI — runs on every PR and push
+  # ------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -8,6 +28,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install ruff && ruff check app/
+
   test:
     needs: lint
     runs-on: ubuntu-latest
@@ -17,13 +38,71 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install -r app/requirements.txt pytest httpx
       - run: pytest -q app/tests
+
+  # ---- STATIC ANALYSIS LAYER 1: SAST on source code ----
   sast:
     needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: returntocorp/semgrep-action@v1
-        with: { config: p/python p/secrets p/owasp-top-ten }
+
+      - name: Semgrep SAST (hard fail on ERROR severity)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/secrets
+            p/owasp-top-ten
+            p/command-injection
+            p/sql-injection
+
+      - name: Bandit (Python security linter)
+        run: |
+          pip install bandit
+          bandit -r app/ -ll -ii -f txt
+          # -ll: only MEDIUM+; -ii: only MEDIUM+ confidence — hard fail otherwise
+
+      - name: Upload SAST SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+        continue-on-error: true
+
+  # ---- STATIC ANALYSIS LAYER 2: IaC scan on Terraform ----
+  iac-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform fmt check
+        run: |
+          cd infra
+          terraform fmt -check -recursive
+
+      - name: Terraform validate
+        run: |
+          cd infra
+          terraform init -backend=false
+          terraform validate
+
+      - name: tfsec (Terraform static analysis — hard fail on HIGH/CRITICAL)
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infra
+          soft_fail: false
+          # tfsec exits non-zero on HIGH/CRITICAL → fails the job
+
+      - name: Checkov (policy-as-code — hard fail on HIGH/CRITICAL)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infra
+          framework: terraform
+          soft_fail: false
+          # Fails build on any HIGH/CRITICAL policy violation
+
+  # ---- STATIC ANALYSIS LAYER 3: dependency vulnerability scan ----
   deps-scan:
     needs: test
     runs-on: ubuntu-latest
@@ -33,27 +112,128 @@ jobs:
         with:
           scan-type: fs
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          exit-code: '1'          # hard fail
           ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-deps.sarif'
+
+      - name: Upload deps SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-deps.sarif
+        continue-on-error: true
+
+  # ---- STATIC ANALYSIS LAYER 4: secret scan ----
   secret-scan:
     needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 0 }  # full history
       - uses: gitleaks/gitleaks-action@v2
-        env: { GITLEAKS_CONFIG: .gitleaks.toml }
-  build-scan:
-    needs: [sast, deps-scan, secret-scan]
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ------------------------------------------------------------------
+  # BUILD + IMAGE SCAN + (PUSH on main only)
+  # ------------------------------------------------------------------
+  build-scan-push:
+    needs: [sast, iac-scan, deps-scan, secret-scan]
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/build-push-action@v6
-        with: { context: ., push: false, tags: "novapay:${{ github.sha }}", load: true }
-      - uses: aquasecurity/trivy-action@master
+
+      - name: Configure AWS credentials (OIDC) — main only
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          image-ref: "novapay:${{ github.sha }}"
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR — main only
+        if: github.ref == 'refs/heads/main'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: |
+            ${{ env.ECR_REPO }}:${{ github.sha }}
+            ${{ env.ECR_REPO }}:latest
+
+      - name: Trivy image scan (hard fail on CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REPO }}:${{ github.sha }}
           severity: 'CRITICAL'
           exit-code: '1'
-      - name: Verify non-root
-        run: docker run --rm novapay:${{ github.sha }} id | grep -q nonroot
+
+      - name: Verify container runs as non-root
+        run: docker run --rm ${{ env.ECR_REPO }}:${{ github.sha }} id | grep -q nonroot
+
+      - name: Push image to ECR — main only
+        if: github.ref == 'refs/heads/main'
+        run: |
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          SHA_TAG="${REGISTRY}/${{ env.ECR_REPO }}:${{ github.sha }}"
+          LATEST_TAG="${REGISTRY}/${{ env.ECR_REPO }}:latest"
+          docker tag ${{ env.ECR_REPO }}:${{ github.sha }} "$SHA_TAG"
+          docker tag ${{ env.ECR_REPO }}:${{ github.sha }} "$LATEST_TAG"
+          docker push "$SHA_TAG"
+          docker push "$LATEST_TAG"
+          echo "image=$SHA_TAG" >> "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------------
+  # CD — deploy to staging, main only, gated behind every prior job
+  # ------------------------------------------------------------------
+  deploy-staging:
+    needs: build-scan-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition novapay-wallet \
+            --query taskDefinition > taskdef.json
+
+      - name: Render new task definition with new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: taskdef.json
+          container-name: wallet
+          image: ${{ needs.build-scan-push.outputs.image }}
+
+      - name: Deploy to ECS staging
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Smoke test /health
+        run: |
+          if [ -n "${{ secrets.STAGING_BASE_URL }}" ]; then
+            curl -fsS "${{ secrets.STAGING_BASE_URL }}/health" | grep -q '"status":"ok"'
+          else
+            echo "STAGING_BASE_URL not set — skipping smoke test"
+          fi
