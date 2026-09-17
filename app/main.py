@@ -1,10 +1,10 @@
-import os
-import json 
-import time
+import json
 import logging
+import os
+import time
 
 from fastapi import FastAPI, HTTPException, Response
-from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 
 app = FastAPI(title="NovaPay Wallet Service")
 VERSION = os.getenv("APP_VERSION", "0.1.0")
