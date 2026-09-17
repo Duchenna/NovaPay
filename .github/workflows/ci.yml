@@ -74,9 +74,10 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-       - name: Setup Terraform
-         uses: hashicorp/setup-terraform@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: setup terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform fmt check
         run: |
