@@ -1,3 +1,6 @@
+# checkov:skip=CKV_AWS_353: Performance Insights deferred for free-tier demo; prod enables.
+# checkov:skip=CKV_AWS_157: Multi-AZ deferred for free-tier demo; prod sets true.
+# checkov:skip=CKV_AWS_226: Auto minor version upgrade managed via maintenance window in prod.
 resource "aws_db_instance" "wallet" {
   identifier                  = "novapay-wallet"
   engine                      = "postgres"
@@ -13,5 +16,7 @@ resource "aws_db_instance" "wallet" {
   publicly_accessible         = false
   deletion_protection         = true
   backup_retention_period     = 7
-}
+  copy_tags_to_snapshot       = true
 
+  tags = { Name = "novapay-wallet-db" }
+}
