@@ -298,3 +298,60 @@ resource "aws_acm_certificate" "wallet" {
 
   tags = { Name = "novapay-wallet-cert" }
 }
+
+# ---------------------------------------------------------------------------
+# Default security group — neutralised (denies all traffic)
+# ---------------------------------------------------------------------------
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.novapay.id
+
+  tags = { Name = "novapay-default-sg-DO-NOT-USE" }
+}
+
+# ---------------------------------------------------------------------------
+# WAF — regional WebACL protecting the wallet ALB
+# ---------------------------------------------------------------------------
+resource "aws_wafv2_web_acl" "wallet" {
+  name        = "novapay-wallet-waf"
+  description = "Regional WAF for the NovaPay wallet ALB"
+  scope       = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "rate-limit"
+    priority = 1
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "novapay-rate-limit"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "novapay-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = { Name = "novapay-wallet-waf" }
+}
+
+resource "aws_wafv2_web_acl_association" "wallet" {
+  resource_arn = aws_lb.wallet.arn
+  web_acl_arn  = aws_wafv2_web_acl.wallet.arn
+}
