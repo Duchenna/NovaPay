@@ -38,6 +38,33 @@ resource "aws_security_group" "alb" {
   description = "Public ingress for the NovaPay ALB"
   vpc_id      = aws_vpc.novapay.id
 
+<<<<<<< HEAD
+  ingress {
+    description = "HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTP from anywhere (redirect to HTTPS at the listener)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description     = "Outbound to the wallet service only"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.svc.id]
+  }
+
+=======
+>>>>>>> ccd84c4620bdc0fdecc9ad001ab62593e581adf4
   tags = { Name = "novapay-alb-sg" }
 }
 
