@@ -234,6 +234,19 @@ resource "aws_acm_certificate" "wallet" {
 # ---------------------------------------------------------------------------
 # WAF — regional WebACL protecting the ALB (rate limit + common managed rules)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# WAF — regional WebACL protecting the ALB
+#   * rate limit per IP
+#   * AWS Managed Rule Set: KnownBadInputs (Log4Shell and friends)
+#   * logging to CloudWatch
+# ---------------------------------------------------------------------------
+resource "aws_cloudwatch_log_group" "waf" {
+  name              = "aws-waf-logs-novapay"
+  retention_in_days = 365
+
+  tags = { Name = "novapay-waf-logs" }
+}
+
 resource "aws_wafv2_web_acl" "wallet" {
   name        = "novapay-wallet-waf"
   description = "Regional WAF for the NovaPay wallet ALB"
@@ -243,6 +256,7 @@ resource "aws_wafv2_web_acl" "wallet" {
     allow {}
   }
 
+  # Rule 1 — rate limit per IP
   rule {
     name     = "rate-limit"
     priority = 1
@@ -265,6 +279,52 @@ resource "aws_wafv2_web_acl" "wallet" {
     }
   }
 
+  # Rule 2 — AWS Managed Rule Set: KnownBadInputs (Log4Shell, SSRF, etc.)
+  rule {
+    name     = "aws-known-bad-inputs"
+    priority = 2
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "novapay-known-bad-inputs"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # Rule 3 — AWS Managed Rule Set: Common Rule Set (OWASP-style baseline)
+  rule {
+    name     = "aws-common"
+    priority = 3
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "novapay-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = "novapay-waf"
@@ -274,11 +334,25 @@ resource "aws_wafv2_web_acl" "wallet" {
   tags = { Name = "novapay-wallet-waf" }
 }
 
+# WAF logging → CloudWatch
+resource "aws_wafv2_web_acl_logging_configuration" "wallet" {
+  log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
+  resource_arn            = aws_wafv2_web_acl.wallet.arn
+
+  # Redact sensitive headers/cookies so PII doesn't leak into logs (NDPA)
+  redacted_fields {
+    single_header { name = "authorization" }
+  }
+  redacted_fields {
+    single_header { name = "cookie" }
+  }
+}
+
+# Attach WAF to the ALB
 resource "aws_wafv2_web_acl_association" "wallet" {
   resource_arn = aws_lb.wallet.arn
   web_acl_arn  = aws_wafv2_web_acl.wallet.arn
 }
-
 # ---------------------------------------------------------------------------
 # VPC flow logs — required for regulatory audit (CBN / NDPA)
 # ---------------------------------------------------------------------------
