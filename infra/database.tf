@@ -15,6 +15,11 @@ resource "aws_db_parameter_group" "wallet" {
     value = "1000"
   }
 
+  parameter {
+    name  = "rds.force_ssl"
+    value = "1"
+  }
+
   tags = { Name = "novapay-wallet-pg" }
 }
 

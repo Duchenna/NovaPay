@@ -169,9 +169,15 @@ resource "aws_lb" "wallet" {
   enable_deletion_protection = true
   drop_invalid_header_fields = true
 
+  # <-- NEW
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.bucket
+    prefix  = "wallet-alb"
+    enabled = true
+  }
+
   tags = { Name = "novapay-wallet-alb" }
 }
-
 resource "aws_lb_target_group" "wallet" {
   name        = "novapay-wallet-tg"
   port        = 8080
@@ -406,4 +412,47 @@ resource "aws_flow_log" "novapay" {
   iam_role_arn         = aws_iam_role.vpc_flow.arn
 
   tags = { Name = "novapay-vpc-flow-logs" }
+}
+
+
+# ---------------------------------------------------------------------------
+# S3 bucket for ALB access logs (encrypted, private, 90-day lifecycle)
+# ---------------------------------------------------------------------------
+resource "aws_s3_bucket" "alb_logs" {
+  bucket        = "novapay-alb-logs-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
+
+  tags = { Name = "novapay-alb-logs" }
+}
+
+resource "aws_s3_bucket_public_access_block" "alb_logs" {
+  bucket                  = aws_s3_bucket.alb_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.novapay.arn
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+
+  rule {
+    id     = "expire-old-logs"
+    status = "Enabled"
+
+    filter {}
+
+    expiration { days = 90 }
+  }
 }
