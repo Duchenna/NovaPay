@@ -1,5 +1,5 @@
 # ---- build stage ----
-FROM python:3.12-slim AS build
+FROM python:3.11-slim AS build
 WORKDIR /app
 COPY app/requirements.txt .
 # Install into the build image's system site-packages
@@ -11,11 +11,11 @@ FROM gcr.io/distroless/python3-debian12:nonroot
 WORKDIR /app
 
 # Copy both the interpreter's site-packages AND the app's binary deps
-COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=build /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 COPY --from=build /app /app
 
-ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages
+ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages
 ENV PYTHONUNBUFFERED=1
 ENV APP_VERSION=0.1.0
 
