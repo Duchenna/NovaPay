@@ -14,3 +14,9 @@ resource "aws_db_instance" "wallet" {
   deletion_protection         = true
   backup_retention_period     = 7
 }
+
+resource "aws_db_instance" "wallet" {
+  # ... existing config ...
+
+  copy_tags_to_snapshot = true   # ← add this
+}
