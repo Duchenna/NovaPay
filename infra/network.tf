@@ -38,7 +38,6 @@ resource "aws_security_group" "alb" {
   description = "Public ingress for the NovaPay ALB"
   vpc_id      = aws_vpc.novapay.id
 
-<<<<<<< HEAD
   ingress {
     description = "HTTPS from anywhere"
     from_port   = 443
@@ -63,9 +62,6 @@ resource "aws_security_group" "alb" {
     security_groups = [aws_security_group.svc.id]
   }
 
-=======
->>>>>>> ccd84c4620bdc0fdecc9ad001ab62593e581adf4
-  tags = { Name = "novapay-alb-sg" }
 }
 
 resource "aws_security_group" "svc" {
