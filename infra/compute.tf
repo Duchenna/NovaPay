@@ -85,7 +85,7 @@ resource "aws_ecs_task_definition" "wallet" {
 
     secrets = [{
       name      = "DB_PASSWORD"
-      valueFrom = aws_secretsmanager_secret.db_pass.arn
+      valueFrom = aws_db_instance.wallet.master_user_secret[0].secret_arn
     }]
 
     logConfiguration = {
@@ -149,3 +149,11 @@ resource "aws_ecs_service" "wallet" {
     aws_iam_role_policy.task,
   ]
 }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.wallet.arn
+    container_name   = "wallet"
+    container_port   = 8080
+  }
+
+  health_check_grace_period_seconds = 30

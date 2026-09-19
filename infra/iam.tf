@@ -12,7 +12,7 @@ resource "aws_iam_role_policy" "task_exec" {
       Resource = "${aws_cloudwatch_log_group.wallet.arn}:*" },
       { Effect = "Allow",
         Action = ["secretsmanager:GetSecretValue"],
-      Resource = aws_secretsmanager_secret.db_pass.arn }
+      Resource = aws_db_instance.wallet.master_user_secret[0].secret_arn }
     ]
   })
 }
@@ -23,7 +23,7 @@ resource "aws_iam_role_policy" "task" {
     Statement = [{
       Effect   = "Allow",
       Action   = ["secretsmanager:GetSecretValue"],
-      Resource = aws_secretsmanager_secret.db_pass.arn
+      Resource = aws_db_instance.wallet.master_user_secret[0].secret_arn
     }]
   })
 }
