@@ -53,7 +53,7 @@ resource "aws_security_group" "alb" {
   }
 
   egress {
-    description = "Outbound to the wallet service only"
+    description     = "Outbound to the wallet service only"
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
