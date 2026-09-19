@@ -242,6 +242,7 @@ resource "aws_acm_certificate" "wallet" {
 # ---------------------------------------------------------------------------
 resource "aws_cloudwatch_log_group" "waf" {
   name              = "aws-waf-logs-novapay"
+  kms_key_id        = aws_kms_key.novapay.arn
   retention_in_days = 365
 
   tags = { Name = "novapay-waf-logs" }
@@ -358,6 +359,7 @@ resource "aws_wafv2_web_acl_association" "wallet" {
 # ---------------------------------------------------------------------------
 resource "aws_cloudwatch_log_group" "vpc_flow" {
   name              = "/novapay/vpc-flow"
+  kms_key_id        = aws_kms_key.novapay.arn
   retention_in_days = 365
 
   tags = { Name = "novapay-vpc-flow" }
