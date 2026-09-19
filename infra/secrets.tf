@@ -19,8 +19,8 @@ resource "aws_kms_key" "novapay" {
         Resource = "*"
       },
       {
-        Sid    = "AllowSecretsManager"
-        Effect = "Allow"
+        Sid       = "AllowSecretsManager"
+        Effect    = "Allow"
         Principal = { Service = "secretsmanager.amazonaws.com" }
         Action = [
           "kms:Encrypt",

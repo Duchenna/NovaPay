@@ -148,7 +148,7 @@ resource "aws_ecs_service" "wallet" {
     aws_iam_role_policy.task_exec,
     aws_iam_role_policy.task,
   ]
-}
+
 
   load_balancer {
     target_group_arn = aws_lb_target_group.wallet.arn
@@ -157,3 +157,4 @@ resource "aws_ecs_service" "wallet" {
   }
 
   health_check_grace_period_seconds = 30
+}
