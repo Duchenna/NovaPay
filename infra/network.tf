@@ -420,7 +420,7 @@ resource "aws_flow_log" "novapay" {
 # ---------------------------------------------------------------------------
 resource "aws_s3_bucket" "alb_logs" {
   bucket        = "novapay-alb-logs-${data.aws_caller_identity.current.account_id}"
-  force_destroy = true
+  force_destroy = false
 
   tags = { Name = "novapay-alb-logs" }
 }
